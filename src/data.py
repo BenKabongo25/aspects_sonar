@@ -128,7 +128,6 @@ class AspectDataset(Dataset):
         self.texts = texts
         self.annotations = annotations
 
-
         self.text_embeddings = text_embeddings
         if self.text_embeddings is None:
             assert self.text_encoder is not None, 'Text encoder is required to encode texts!'
