@@ -2,6 +2,7 @@
 # March 2025
 
 
+import re
 import torch
 import torch.nn as nn
 
@@ -16,6 +17,26 @@ PAD_TOKEN = '<pad>'
 UNK_TOKEN = '<unk>'
 PAD_IDX = 0
 UNK_IDX = 1
+
+
+def preprocess_text(text: str, max_length: int=-1) -> str:
+    text = str(text).strip()
+    text = text.lower()
+    text = re.sub('( )+', ' ', text)
+    text = re.sub(r" \'(s|m|ve|d|ll|re)", r"'\1", text)
+    text = re.sub(r" \(", "(", text)
+    text = re.sub(r" \)", ")", text)
+    text = re.sub(r" ,", ",", text)
+    text = re.sub(r" \.", ".", text)
+    text = re.sub(r" !", "!", text)
+    text = re.sub(r" \?", "?", text)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    if max_length > 0:
+        text = str(text).strip().split()
+        if len(text) > max_length:
+            text = text[:max_length]
+        text = " ".join(text)
+    return text
 
 
 class AspectVocabulary:
@@ -119,36 +140,42 @@ class AspectDataset(Dataset):
         annotations: List[List[Tuple[str]]], 
         aspect_ids: Optional[List[List[int]]]=None,
         class_ids: Optional[List[List[int]]]=None,
-        text_embeddings: Optional[torch.FloatTensor]=None
+        text_embeddings: Optional[torch.FloatTensor]=None,
+        max_length: int=-1
     ):
         super().__init__()
         self.vocab = vocab
         self.text_encoder = text_encoder
-
         self.texts = texts
         self.annotations = annotations
-
         self.text_embeddings = text_embeddings
+        self.aspect_ids = aspect_ids
+        self.class_ids = class_ids
+        self.max_length = max_length
+        self._preprocess()
+
+    def _preprocess(self) -> None:
         if self.text_embeddings is None:
             assert self.text_encoder is not None, 'Text encoder is required to encode texts!'
-            self._encode_texts()
 
-        if aspect_ids is not None and class_ids is not None:
-            self.aspect_ids = aspect_ids
-            self.class_ids = class_ids
-        else:
+        if aspect_ids is None and class_ids is None:
+            annotation_flag = True
             self.aspect_ids = []
             self.class_ids = []
-            for annotations in self.annotations:
+
+        text_embeddings = []
+        for i in range(len(self.texts)):
+            self.texts[i] = preprocess_text(self.texts[i], max_length=self.max_length)
+            with torch.no_grad():
+                text_embedding = self.text_encoder(self.texts[i])
+            text_embeddings.append(text_embedding)
+
+            if annotation_flag:
+                annotations = self.annotations[i]
                 aspect_ids, class_ids = self.vocab.annotations_to_ids(annotations)
                 self.aspect_ids.append(aspect_ids)
                 self.class_ids.append(class_ids)
 
-    def _encode_texts(self) -> None:
-        text_embeddings = []
-        for text in self.texts:
-            text_embedding = self.text_encoder(text)
-            text_embeddings.append(text_embedding)
         self.text_embeddings = torch.cat(text_embeddings, dim=0)
 
     def __len__(self) -> int:

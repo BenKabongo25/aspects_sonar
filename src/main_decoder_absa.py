@@ -194,9 +194,11 @@ def set_seed(seed: int) -> None:
 
 
 def main(
-    train_path: str,
-    eval_path: str,
-    test_path: str,
+    train_path: str='../datasets/Restaurant/train.csv',
+    eval_path: str='../datasets/Restaurant/eval.csv',
+    test_path: str='../datasets/Restaurant/test.csv',
+    aspect_idx: int=0,
+    class_idx: int=1,
     dropout: float=0.1,
     encoder_type: str='sonar',
     d_model: int=1024,
@@ -208,7 +210,7 @@ def main(
     batch_size: int=128,
     lr: float=1e-3,
     n_epochs: int=10,
-    save_dir: str='decoder_absa/',
+    save_dir: str='../exps/decoder_absa/',
     seed: int=42,
 ):
     set_seed(seed)
@@ -222,9 +224,22 @@ def main(
     eval_df = pd.read_csv(eval_path)
     test_df = pd.read_csv(test_path)
 
-    train_df['annotations'] = train_df['annotations'].apply(ast.literal_eval)
-    eval_df['annotations'] = eval_df['annotations'].apply(ast.literal_eval)
-    test_df['annotations'] = test_df['annotations'].apply(ast.literal_eval)
+    extract = lambda x: (x[aspect_idx], x[class_idx])
+    train_df['annotations'] = (
+        train_df['annotations']
+        .apply(ast.literal_eval)
+        .apply(lambda x: [extract(annotation) for annotation in x])
+    )
+    eval_df['annotations'] = (
+        eval_df['annotations']
+        .apply(ast.literal_eval)
+        .apply(lambda x: [extract(annotation) for annotation in x])
+    )
+    test_df['annotations'] = (
+        test_df['annotations']
+        .apply(ast.literal_eval)
+        .apply(lambda x: [extract(annotation) for annotation in x])
+    )
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
